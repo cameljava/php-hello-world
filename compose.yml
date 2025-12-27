@@ -1,0 +1,17 @@
+services:
+  php-hello-world:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cameljava/php-hello-world:local
+    container_name: php-hello-world-local
+    ports:
+      - "28080:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
