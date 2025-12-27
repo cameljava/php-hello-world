@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('ef965854-d5f9-4606-8f7d-ec643ac02c1a')
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credential')
         DOCKER_IMAGE = 'cameljava/php-hello-world'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
     }
