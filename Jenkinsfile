@@ -14,32 +14,35 @@ pipeline {
             }
         }
         
-        stage('Build Docker Image') {
+        stage('Build Docker Image with Buildah') {
             steps {
                 script {
-                    sh '''
-                        alias docker=podman
-                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                        docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                    '''
+                    // Buildah build command (similar to docker build)
+                    sh """
+                        buildah bud \
+                            --tag ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                            --tag ${DOCKER_IMAGE}:latest \
+                            -f Dockerfile \
+                            .
+                    """
                 }
             }
         }
         
-        stage('Push to DockerHub') {
+        stage('Push Image') {
             steps {
                 script {
-                    sh '''
-                        alias docker=podman
-                        echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
-                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                        docker push ${DOCKER_IMAGE}:latest
-                    '''
+                    // Use skopeo (included with Buildah) to push images
+                    // Or use buildah push
+                    sh """
+                        buildah push ${DOCKER_IMAGE}:${IMAGE_TAG} docker://${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                        buildah push $${DOCKER_IMAGE}:latest docker://${REGISTRY}/${IMAGE_NAME}:latest
+                    """
                 }
             }
         }
     }
-    
+   
     post {
         always {
             sh 'alias docker=podman&&docker logout'
