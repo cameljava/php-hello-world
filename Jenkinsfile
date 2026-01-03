@@ -18,13 +18,14 @@ pipeline {
             steps {
                 script {
                     // Buildah build command (similar to docker build)
-                    sh """
+                    sh 
+                    '''
                         buildah bud \
                             --tag ${DOCKER_IMAGE}:${IMAGE_TAG} \
                             --tag ${DOCKER_IMAGE}:latest \
                             -f Dockerfile \
                             .
-                    """
+                    '''
                 }
             }
         }
@@ -34,10 +35,11 @@ pipeline {
                 script {
                     // Use skopeo (included with Buildah) to push images
                     // Or use buildah push
-                    sh """
-                        buildah push ${DOCKER_IMAGE}:${IMAGE_TAG} docker://${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        buildah push $${DOCKER_IMAGE}:latest docker://${REGISTRY}/${IMAGE_NAME}:latest
-                    """
+                    sh 
+                    '''
+                        buildah push ${DOCKER_IMAGE}:${IMAGE_TAG} docker://${DOCKER_IMAGE}:${IMAGE_TAG}
+                        buildah push ${DOCKER_IMAGE}:latest docker://${DOCKER_IMAGE}:latest
+                    '''
                 }
             }
         }
