@@ -17,10 +17,11 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh """
+                    sh '''
+                        alias docker=podman
                         docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
                         docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                    """
+                    '''
                 }
             }
         }
@@ -28,11 +29,12 @@ pipeline {
         stage('Push to DockerHub') {
             steps {
                 script {
-                    sh """
+                    sh '''
+                        alias docker=podman
                         echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
                         docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
                         docker push ${DOCKER_IMAGE}:latest
-                    """
+                    '''
                 }
             }
         }
@@ -40,7 +42,7 @@ pipeline {
     
     post {
         always {
-            sh 'docker logout'
+            sh 'alias docker=podman&&docker logout'
             cleanWs()
         }
         success {
