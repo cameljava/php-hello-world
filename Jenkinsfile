@@ -5,6 +5,7 @@ pipeline {
         DOCKER_IMAGE = 'cameljava/php-hello-world'
         DOCKER_TAG   = "${BUILD_NUMBER}"
         BUILDAH_ISOLATION = 'chroot'
+        STORAGE_DRIVER=vfs
     }
 
     stages {
@@ -22,10 +23,17 @@ pipeline {
                     # Force writable locations for rootless Buildah
                     export HOME="$WORKSPACE"
                     export TMPDIR="$WORKSPACE/tmp"
-                    mkdir -p "$TMPDIR"
+
+                    mkdir -p \
+                        "$TMPDIR" \
+                        "$WORKSPACE/buildah-root" \
+                        "$WORKSPACE/buildah-runroot"
 
                     buildah bud \
+                        --isolation=chroot \
                         --storage-driver=vfs \
+                        --root "$WORKSPACE/buildah-root" \
+                        --runroot "$WORKSPACE/buildah-runroot" \
                         --tag ${DOCKER_IMAGE}:${DOCKER_TAG} \
                         --tag ${DOCKER_IMAGE}:latest \
                         -f Dockerfile \
