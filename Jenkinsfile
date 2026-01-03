@@ -4,40 +4,43 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'cameljava/php-hello-world'
         DOCKER_TAG   = "${BUILD_NUMBER}"
-        BUILDAH_ISOLATION = 'chroot'
-        STORAGE_DRIVER='vfs'
+        CONTAINERS_STORAGE_CONF = "${WORKSPACE}/storage.conf"
+        TMPDIR = "${WORKSPACE}/tmp"
     }
 
     stages {
+        stage('Initialize Environment') {
+            steps {
+                sh '''
+                    mkdir -p "$TMPDIR" "${WORKSPACE}/buildah-root" "${WORKSPACE}/buildah-runroot"
+
+                    cat <<EOF > "$CONTAINERS_STORAGE_CONF"
+[storage]
+driver = "vfs"
+runroot = "${WORKSPACE}/buildah-runroot"
+graphroot = "${WORKSPACE}/buildah-root"
+
+[storage.options.vfs]
+ignore_chown_errors = "true"
+EOF
+                '''
+            }
+        }
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Build Docker Image with Buildah') {
+        stage('Build Image') {
             steps {
                 sh '''
-                    set -e
-
-                    # Force writable locations for rootless Buildah
-                    export HOME="$WORKSPACE"
-                    export TMPDIR="$WORKSPACE/tmp"
-
-                    mkdir -p \
-                        "$TMPDIR" \
-                        "$WORKSPACE/buildah-root" \
-                        "$WORKSPACE/buildah-runroot"
-
+                    export BUILDAH_ISOLATION=chroot
                     buildah bud \
-                        --isolation=chroot \
-                        --storage-driver=vfs \
-                        --root "$WORKSPACE/buildah-root" \
-                        --runroot "$WORKSPACE/buildah-runroot" \
                         --tag ${DOCKER_IMAGE}:${DOCKER_TAG} \
                         --tag ${DOCKER_IMAGE}:latest \
-                        -f Dockerfile \
-                        .
+                        -f Dockerfile .
                 '''
             }
         }
@@ -52,15 +55,9 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        buildah login \
-                          -u "$DOCKERHUB_USER" \
-                          -p "$DOCKERHUB_PASS" \
-                          docker.io
-
+                        buildah login -u "$DOCKERHUB_USER" -p "$DOCKERHUB_PASS" docker.io
                         buildah push ${DOCKER_IMAGE}:${DOCKER_TAG}
                         buildah push ${DOCKER_IMAGE}:latest
-
-                        buildah logout docker.io
                     '''
                 }
             }
@@ -69,13 +66,17 @@ pipeline {
 
     post {
         always {
+            script {
+                // Ensure we log out and clean up temporary storage files
+                sh '''
+                    # Logout from docker.io; || true ensures the script continues if not logged in
+                    buildah logout docker.io || true
+                    
+                    # Clean up the workspace storage to prevent disk exhaustion
+                    rm -rf "${WORKSPACE}/buildah-root" "${WORKSPACE}/buildah-runroot" "$TMPDIR"
+                '''
+            }
             cleanWs()
-        }
-        success {
-            echo "Docker image ${DOCKER_IMAGE}:${DOCKER_TAG} pushed successfully!"
-        }
-        failure {
-            echo "Pipeline failed!"
         }
     }
 }
