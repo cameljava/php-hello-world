@@ -5,7 +5,7 @@ pipeline {
         DOCKER_IMAGE = 'cameljava/php-hello-world'
         DOCKER_TAG   = "${BUILD_NUMBER}"
         BUILDAH_ISOLATION = 'chroot'
-        STORAGE_DRIVER=vfs
+        STORAGE_DRIVER='vfs'
     }
 
     stages {
