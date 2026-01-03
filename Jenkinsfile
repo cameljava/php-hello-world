@@ -47,7 +47,7 @@ pipeline {
    
     post {
         always {
-            sh 'alias docker=podman&&docker logout'
+//            sh 'alias docker=podman&&docker logout'
             cleanWs()
         }
         success {
