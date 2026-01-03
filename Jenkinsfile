@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'cameljava/php-hello-world'
         DOCKER_TAG   = "${BUILD_NUMBER}"
-        // BUILDAH_ISOLATION = 'chroot'
+        BUILDAH_ISOLATION = 'chroot'
     }
 
     stages {
