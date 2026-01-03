@@ -1,53 +1,66 @@
 pipeline {
     agent any
-    
+
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credential')
         DOCKER_IMAGE = 'cameljava/php-hello-world'
-        DOCKER_TAG = "${env.BUILD_NUMBER}"
+        DOCKER_TAG   = "${BUILD_NUMBER}"
+        // BUILDAH_ISOLATION = 'chroot'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
-        
+
         stage('Build Docker Image with Buildah') {
             steps {
-                script {
-                    // Buildah build command (similar to docker build)
-                    sh 
-                    '''
-                        buildah bud \
-                            --tag ${DOCKER_IMAGE}:${IMAGE_TAG} \
-                            --tag ${DOCKER_IMAGE}:latest \
-                            -f Dockerfile \
-                            .
-                    '''
-                }
+                sh '''
+                    set -e
+
+                    # Force writable locations for rootless Buildah
+                    export HOME="$WORKSPACE"
+                    export TMPDIR="$WORKSPACE/tmp"
+                    mkdir -p "$TMPDIR"
+
+                    buildah bud \
+                        --storage-driver=vfs \
+                        --tag ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                        --tag ${DOCKER_IMAGE}:latest \
+                        -f Dockerfile \
+                        .
+                '''
             }
         }
-        
+
         stage('Push Image') {
             steps {
-                script {
-                    // Use skopeo (included with Buildah) to push images
-                    // Or use buildah push
-                    sh 
-                    '''
-                        buildah push ${DOCKER_IMAGE}:${IMAGE_TAG} docker://${DOCKER_IMAGE}:${IMAGE_TAG}
-                        buildah push ${DOCKER_IMAGE}:latest docker://${DOCKER_IMAGE}:latest
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credential',
+                        usernameVariable: 'DOCKERHUB_USER',
+                        passwordVariable: 'DOCKERHUB_PASS'
+                    )
+                ]) {
+                    sh '''
+                        buildah login \
+                          -u "$DOCKERHUB_USER" \
+                          -p "$DOCKERHUB_PASS" \
+                          docker.io
+
+                        buildah push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                        buildah push ${DOCKER_IMAGE}:latest
+
+                        buildah logout docker.io
                     '''
                 }
             }
         }
     }
-   
+
     post {
         always {
-//            sh 'alias docker=podman&&docker logout'
             cleanWs()
         }
         success {
@@ -58,4 +71,3 @@ pipeline {
         }
     }
 }
-
