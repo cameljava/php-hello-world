@@ -4,28 +4,10 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'cameljava/php-hello-world'
         DOCKER_TAG   = "${BUILD_NUMBER}"
-        CONTAINERS_STORAGE_CONF = "${WORKSPACE}/storage.conf"
-        TMPDIR = "${WORKSPACE}/tmp"
+        DOCKER_BUILDKIT = '1'
     }
 
     stages {
-        stage('Initialize Environment') {
-            steps {
-                sh '''
-                    mkdir -p "$TMPDIR" "${WORKSPACE}/buildah-root" "${WORKSPACE}/buildah-runroot"
-
-                    cat <<EOF > "$CONTAINERS_STORAGE_CONF"
-[storage]
-driver = "vfs"
-runroot = "${WORKSPACE}/buildah-runroot"
-graphroot = "${WORKSPACE}/buildah-root"
-
-[storage.options.vfs]
-ignore_chown_errors = "true"
-EOF
-                '''
-            }
-        }
 
         stage('Checkout') {
             steps {
@@ -33,19 +15,22 @@ EOF
             }
         }
 
-        stage('Build Image') {
+        stage('Setup Buildx Builder') {
             steps {
                 sh '''
-                    export BUILDAH_ISOLATION=chroot
-                    buildah bud \
-                        --tag ${DOCKER_IMAGE}:${DOCKER_TAG} \
-                        --tag ${DOCKER_IMAGE}:latest \
-                        -f Dockerfile .
+                    set -e
+
+                    # Create a user-space builder (idempotent)
+                    if ! docker buildx inspect mybuilder >/dev/null 2>&1; then
+                        docker buildx create --name mybuilder --use
+                    else
+                        docker buildx use mybuilder
+                    fi
                 '''
             }
         }
 
-        stage('Push Image') {
+        stage('Build and Push Image') {
             steps {
                 withCredentials([
                     usernamePassword(
@@ -55,9 +40,19 @@ EOF
                     )
                 ]) {
                     sh '''
-                        buildah login -u "$DOCKERHUB_USER" -p "$DOCKERHUB_PASS" docker.io
-                        buildah push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                        buildah push ${DOCKER_IMAGE}:latest
+                        set -e
+
+                        # Login to Docker Hub
+                        docker login -u "$DOCKERHUB_USER" -p "$DOCKERHUB_PASS"
+
+                        # Build and push the image with BuildKit / buildx
+                        docker buildx build \
+                            --builder mybuilder \
+                            --platform linux/amd64 \
+                            --tag ${DOCKER_IMAGE}:${DOCKER_TAG} \
+                            --tag ${DOCKER_IMAGE}:latest \
+                            --push \
+                            -f Dockerfile .
                     '''
                 }
             }
@@ -66,17 +61,17 @@ EOF
 
     post {
         always {
-            script {
-                // Ensure we log out and clean up temporary storage files
-                sh '''
-                    # Logout from docker.io; || true ensures the script continues if not logged in
-                    buildah logout docker.io || true
-                    
-                    # Clean up the workspace storage to prevent disk exhaustion
-                    rm -rf "${WORKSPACE}/buildah-root" "${WORKSPACE}/buildah-runroot" "$TMPDIR"
-                '''
-            }
+            sh '''
+                # Logout from Docker Hub
+                docker logout || true
+            '''
             cleanWs()
+        }
+        success {
+            echo "✅ Image ${DOCKER_IMAGE}:${DOCKER_TAG} pushed successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed!"
         }
     }
 }
